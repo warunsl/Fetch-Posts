@@ -192,7 +192,7 @@ if __name__=="__main__":
     access_token = u""
     access_token_secret = u""
 
-    keywords = ('#scandal', 'kerry washington')
+    keywords = []
 
     sesh = get_session(consumer_key, 
                         consumer_secret, 
