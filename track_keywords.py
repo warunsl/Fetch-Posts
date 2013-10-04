@@ -6,6 +6,7 @@ Track keywords on Twitter using the public Streaming API
 
 """
 from __future__ import unicode_literals
+import argparse
 import sys
 import json
 import time
@@ -169,7 +170,7 @@ def dump_to_mongo(tracker, collection):
         # Insert each json as an entry in the mongodb collection
         entry = collection.insert(tweet)
         
-def dump_to_stdout(tracker, encoding='utf-16', tracer=1000):
+def dump_to_stdout(tracker, encoding='utf-16', tracer=0):
     """ Loop over tweets in tracker and print them to stdout 
         If tracer a non-zero integer, then the text of 
             every tracer-th tweet will be printed to stderr
@@ -181,25 +182,66 @@ def dump_to_stdout(tracker, encoding='utf-16', tracer=1000):
             if not n % tracer:
                 text = tweet.get('text', '').encode('utf-16', errors="replace")
                 username = tweet['user'].get('scree_name', '').encode('utf-16', errors="replace")
-                for s in (u'\n', unicode(n), u' ', username, u' ', text, u'\n'):
+                for s in (unicode(n), u' ', username, u' ', text, u'\n'):
                     sys.stderr.write(s)
 
 
 if __name__=="__main__":
 
-    consumer_key = u""
-    consumer_secret = u""
-    access_token = u""
-    access_token_secret = u""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--clientkey', 
+                            type=str,
+                            default=u"",
+                            help="Consumer Key")
+    parser.add_argument('--clientsecret', 
+                            type=str,
+                            default=u"",
+                            help="Consumer Secret")
+    parser.add_argument('--resourcekey', 
+                            type=str,
+                            default=u"",
+                            help="Access Token")
+    parser.add_argument('--resourcesecret', 
+                            type=str,
+                            default=u"",
+                            help="Access Token Secret")
+    parser.add_argument('--keywords',
+                            type=str,
+                            default='',
+                            help='Path to file with keywords, one per line')
+    parser.add_argument('--tracer', 
+                            type=int,
+                            default=0,
+                            help="How often to print a tweet to stderr")
 
+    args = parser.parse_args()
+
+    consumer_key = args.clientkey
+    consumer_secret = args.clientsecret 
+    access_token = args.resourcekey 
+    access_token_secret = args.resourcesecret
+
+    sys.stderr.write('\nParsing keyword file:\n')
     keywords = []
+    if args.keywords:
+        with open(args.keywords, 'rb') as f:
+            for line in f:
+                kw = line.strip()
+                if kw:
+                    keywords.append(kw)
+                    sys.stderr.write('\t')
+                    sys.stderr.write(kw)
+                    sys.stderr.write('\n')
 
+
+    sys.stderr.write('\nAuthorizing tracker with Twitter...')
     sesh = get_session(consumer_key, 
                         consumer_secret, 
                         access_token, 
                         access_token_secret)
-
     stream = track(keywords, sesh)
-    dump_to_stdout(stream, tracer=1000)
+    sys.stderr.write('done!\n')
 
-
+    sys.stderr.write('\nStarting tracker...\n')
+    dump_to_stdout(stream, tracer=args.tracer)
