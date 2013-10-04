@@ -118,6 +118,9 @@ def track(twitter, keywords=[], user_ids=[]):
     for line in r.iter_lines():
         if line :
             try:
+                # TODO 
+                # Sometimes it returns a "disconnect" obj 
+                # before closing the stream
                 tweet = json.loads(line)
                 yield tweet
             except ValueError:
