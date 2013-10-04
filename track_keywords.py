@@ -92,16 +92,24 @@ def authorize(consumer_key, consumer_secret):
 # API wrappers
 #
 
-def track(keywords, twitter):
+def track(twitter, keywords=[], user_ids=[]):
     """Iterator that yields tweets as dicts one at a time
 
-        keywords: a list of strings to track
         twitter: OAuth1Session object authenticated already
+        keywords: a list of strings to track
+        user_ids: a list of user_ids to track
     """
 
     # Prepare for GET request
     streaming_url = "https://stream.twitter.com/1.1/statuses/filter.json"
-    params = {"track": keywords}
+
+    # Documentation for filter params:
+    #     https://dev.twitter.com/docs/streaming-apis/parameters
+    params = {"replies": "all"}
+    if keywords:
+        params["track"] = keywords
+    if user_ids:
+        params["follow"] = user_ids
 
     # Create Request.get object
     r = twitter.get(url=streaming_url, params=params, stream = True)
@@ -175,14 +183,43 @@ def dump_to_stdout(tracker, encoding='utf-16', tracer=0):
         If tracer a non-zero integer, then the text of 
             every tracer-th tweet will be printed to stderr
     """
+
+    t  = time.time()
+    t1 = time.time()
+    minuteCounter = 0
+    tweets_per_min = -1
+
     for n, tweet in enumerate(tracker):
         j = json.dumps(tweet, encoding=encoding)
         print j
+        minuteCounter += 1
+
+        # Print tracer to stderr
         if tracer:
             if not n % tracer:
-                text = tweet.get('text', '').encode('utf-16', errors="replace")
-                username = tweet['user'].get('scree_name', '').encode('utf-16', errors="replace")
-                for s in (unicode(n), u' ', username, u' ', text, u'\n'):
+
+                # Calc tweets per minute
+                t  = time.time()
+                tweets_per_min = round(float(minuteCounter)/(t-t1)*60, 2)
+                minuteCounter = 1
+                t1 = t
+
+                # This is lazy but catching unicode errors
+                # is a pain in the neck
+                try:
+                    text = tweet.get('text', '').encode('utf-8', errors="replace")
+                    username = tweet['user'].get('screen_name', '').encode('utf-8', errors="replace")
+                except:
+                    text = ''
+                    username = ''
+
+                for s in (unicode(n), 
+                            u' ', 
+                            unicode(tweets_per_min), 
+                            u' ', 
+                            username, 
+                            u' ', 
+                            text, u'\n'):
                     sys.stderr.write(s)
 
 
@@ -210,6 +247,10 @@ if __name__=="__main__":
                             type=str,
                             default='',
                             help='Path to file with keywords, one per line')
+    parser.add_argument('--userids',
+                            type=str,
+                            default='',
+                            help='Path to file with user IDs, one per line')
     parser.add_argument('--tracer', 
                             type=int,
                             default=0,
@@ -222,9 +263,13 @@ if __name__=="__main__":
     access_token = args.resourcekey 
     access_token_secret = args.resourcesecret
 
-    sys.stderr.write('\nParsing keyword file:\n')
+    if not args.keywords and not args.userids:
+        sys.stderr.write("Nothing to track! Please supply keywords or user IDs.\n")
+        sys.exit(1)
+
     keywords = []
     if args.keywords:
+        sys.stderr.write('\nParsing keyword file:\n')
         with open(args.keywords, 'rb') as f:
             for line in f:
                 kw = line.strip()
@@ -234,13 +279,24 @@ if __name__=="__main__":
                     sys.stderr.write(kw)
                     sys.stderr.write('\n')
 
+    user_ids = []
+    if args.userids:
+        sys.stderr.write('\nParsing user IDs file:\n')
+        with open(args.userids, 'rb') as f:
+            for line in f:
+                uid = line.strip()
+                if uid:
+                    keywords.append(uid)
+                    sys.stderr.write('\t')
+                    sys.stderr.write(uid)
+                    sys.stderr.write('\n')
 
     sys.stderr.write('\nAuthorizing tracker with Twitter...')
     sesh = get_session(consumer_key, 
                         consumer_secret, 
                         access_token, 
                         access_token_secret)
-    stream = track(keywords, sesh)
+    stream = track(sesh, keywords, user_ids)
     sys.stderr.write('done!\n')
 
     sys.stderr.write('\nStarting tracker...\n')
